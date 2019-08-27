@@ -11,7 +11,6 @@ from sklearn.cluster import Birch, AffinityPropagation, DBSCAN, MeanShift, Spect
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import kneighbors_graph
 from itertools import cycle, islice
-# lingua latina non penis canina est
 from argparse import ArgumentParser
 
 argparser = ArgumentParser()
@@ -35,7 +34,19 @@ barcodes = [line.strip() for line in open(barcodes_path, 'r')]
 print('Matrix dimensionality {}'.format(mat.shape))
 mat = mat.T #becase we want (samples,features) matrix
 
+def is_mad_based_outlier(points, thresh=3.5):
+    if len(points.shape) == 1:
+        points = points[:,None]
+    median = np.median(points, axis=0)
+    diff = np.sum((points - median)**2, axis=-1)
+    diff = np.sqrt(diff)
+    med_abs_deviation = np.median(diff)
 
+    modified_z_score = 0.6745 * diff / med_abs_deviation
+
+    return modified_z_score > thresh
+  
+  
 #===== 1
 low_expr_thr = 100
 high_expr_thr  = 100000
@@ -44,20 +55,19 @@ per_cell_sum = mat.sum(axis=1)
 per_gene_sum = mat.sum(axis=0)
 
 #===== 2
-mat = mat[:,(per_gene_sum>=low_expr_thr) & (per_gene_sum<=high_expr_thr)] #just remove extreme outliers
+mat = mat[:,per_gene_sum>=is_mad_based_outlier(per_gene_sum)] #just remove extreme outliers
 
 mean_exp = mat.mean(axis=0)
 std_exp = np.sqrt(mat.std(axis=0))
 CV = std_exp/mean_exp
 
 #===== 3
-mat = mat[:,CV>=10]
-
+mat = mat[:,CV>=is_mad_based_outlier(CV)]
 
 cells_expression = mat.sum(axis=1)
 
 #===== 4
-mat = mat[cells_expression>=100,:]
+mat = mat[cells_expression>=is_mad_based_outlier(cells_expression),:]
 mat = np.log(mat+1)
 
 pca = PCA(n_components=100)
